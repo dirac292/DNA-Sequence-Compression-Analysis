@@ -1,116 +1,114 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import copy
 
 """
 Initialize Dict based on length of dictionary and starting bit
 """
 def initalize_dict(sequence):
-    Dictionary = {}
+    dictionary = {}
+    # bin = string_to_binary(sequence)
     for char in sequence:
-        if char not in Dictionary.keys():
-            Dictionary[char] = len(Dictionary)
-    return Dictionary
+        if char not in dictionary.keys():
+            dictionary[char] = len(dictionary)
+    return dictionary
 
 """
 Returns tuple(decomposition,compressed string) the compressed output 
-and the decomposition of the string
+and the decomposition of the string using LZ78 Algorithm
 Note the compressed output is based on the Initialized dictionary
 """
-def LZW_Compression(sequence):
+def LZW_Compression(sequence,dictionary):
     index = 0
     decomposition = []
     compression = []
-    Dictionary = initalize_dict(sequence)
-    # print(Dictionary)
+    dict = copy.deepcopy(dictionary)
     while index < len(sequence):
-
         temp_index = index + 1
         temp_string = sequence[index]
-        # substring = temp_string + sequence[temp_index]
-
-        while temp_index < len(sequence) and (temp_string + sequence[temp_index]) in Dictionary.keys():
+        while temp_index < len(sequence) and (temp_string + sequence[temp_index]) in dict.keys():
             temp_string += sequence[temp_index]
             temp_index += 1
-            # try:
-            #     substring = temp_string + sequence[temp_index]
-            # except:
-            #     continue
-
         decomposition.append(temp_string) # Dictionary[temp_string] will give the 
-        compression.append(Dictionary[temp_string])
+        compression.append(dict[temp_string])
 
         if temp_index < len(sequence):
-            Dictionary[temp_string + sequence[temp_index]] = len(Dictionary)
-
+            dict[temp_string + sequence[temp_index]] = len(dict)
         index = temp_index
-
     return len(decomposition),compression
+
 
 def string_to_binary(string_sequence):
     """Simple converter from a string sequence to a binary sequence"""
     return ''.join(format(ord(x), 'b') for x in string_sequence)
 
-# print(string_to_binary(''))
+"""
+Load the dataset from txt file and combine into a mega dna strand string
+"""
+def data_loader(filename):
+     dna_dataset = filename
+     df = pd.read_csv(dna_dataset, sep = "\t", names = ['sequence','class'], skiprows=1)
+     combine_sequence = df['sequence'].to_list()
+     join_dna = ''.join(combine_sequence)
+     return join_dna
 
-"""Generator that yields the window of the sequence"""
-def window(sequence,window_size = 250,step = 50):
-    start = 0
-    end = window_size
-    while end < len(sequence):
-        yield sequence[start:end]
-        start = start + step
-        end = end + step
+class DNASeq:
 
-def lz_sequence(sequence):
-    lz = []
-    for w in window(sequence):
-        bin = string_to_binary(w)
-        decomp, _ = LZW_Compression(bin)
-        lz.append(decomp)
-    return lz
+    def __init__(self,sequence,dictionary,window_size,step):
+        self.sequence = sequence
+        self.dictionary = initalize_dict(string_to_binary(sequence))
+        self.window_size = window_size
+        self.step = step
+        self.lz_sequence = []
+        self.normalized = []
 
-def normalize_lz(lz_sequence,window_size):
-    return [l/window_size for l in lz_sequence]
+    def split_to_window_sequences(self):
+        lz = []
+        start = 0
+        end = self.window_size
+        while end < len(self.sequence):
+            trimmed_sequence = self.sequence[start:end]
+            bin = string_to_binary(trimmed_sequence)
+            decomp, _ = LZW_Compression(bin,self.dictionary)
+            lz.append(decomp)
+            start = start + self.step
+            end = end + self.step
+        self.lz_sequence = lz
+        # Normalizes and stored as list
+        self.normalize()
+        return lz # Each Item is LZ78 Compressed size
+    
+    def normalize(self):
+        self.normalized = [l/self.window_size for l in self.lz_sequence]
+        return self.normalized
 
-def graph(lz_sequence):
-    plt.plot(lz_sequence)
-    plt.xlabel("Position")
-    plt.ylabel("Lempel-Ziv Complexity")
-    plt.title("Lempel-Ziv Complexity Across DNA Sequence")
+    def graph(self,resolution):
+        plt.plot(self.normalized[0:resolution])
+        plt.xlabel("x")
+        plt.ylabel("Lempel-Ziv Complexity")
+        plt.title("Lempel-Ziv Complexity Across DNA Sequence")
+
+
 
 if __name__ == "__main__":
-    dna_dataset = './human.txt'
-    df = pd.read_csv(dna_dataset, sep = "\t", names = ['sequence','class'], skiprows=1)
-    combine_sequence = df['sequence'].to_list()[:5]
-    join_dna = ''.join(combine_sequence)
-    print(len(join_dna))
-    lz  = lz_sequence(join_dna)
-    print(lz)
-   
-    n_lz_sequence = normalize_lz(lz, 250)
-    print(n_lz_sequence)
-    # resolutions = [100, 1000, 10000]
-
-    # for res in resolutions:
-    #     graph(n_lz_sequence[0:res])
-    #     plt.savefig(f'{res}.png', dpi = 600)
     
-    # graph(n_lz_sequence)
-    # plt.savefig(f'full.png', dpi = 600)
+    join_dna = data_loader('./human.txt')
+    print(f"The full length of Sequence {len(join_dna)}")
 
-    # print(df.loc[:,'sequence'])
-    # print(df)
-    # s = '1001111011000010'
-    # Sample sequence of LZW
-    # 1 0 10
-    # 0 0 00
-    # 0 1 01
-    # 1 1 11
-    # 11 1 111
-    # 1 0 0 1 11 10 11 00 00 10
-    # 0 1 1 0 5 2 5 3 3 2
-    # print(LZW_Compression(s))
+    window_size = 250
+    step = 50
+    dictionary = {}
 
+    d = DNASeq(join_dna,dictionary,window_size,step)
 
+    # Split into window sequences and apply the compression to kolmogrov Complexity Estimate
+    lz = d.split_to_window_sequences()
+    print(f"The number of sequence splits based on Window Size {len(lz)}")
 
+    resolutions = [100, 1000, 10000,len(d.normalized)]
+    # Get Plots from the normalized sequence for different resolution measures
+    for res in resolutions:
+        d.graph(res)
+        # plt.show()
+        plt.savefig(f'{res}.png', dpi = 600)
+    
